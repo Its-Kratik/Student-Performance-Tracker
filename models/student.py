@@ -1,10 +1,10 @@
 """
-Student Model - CRUD operations for Student entity
+Student Model - CRUD operations for Student entity (SQLite version)
 """
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
-from db.mysql_connection import execute_query, fetch_all, fetch_one
+from db.connection import execute_query, fetch_all, fetch_one
 
 class Student:
     def __init__(self, student_id=None, name=None, class_name=None, section=None, dob=None):
@@ -17,7 +17,7 @@ class Student:
     @staticmethod
     def add_student(name: str, class_name: str, section: str, dob: date) -> bool:
         """Add new student to database"""
-        query = "INSERT INTO Student (name, class, section, dob) VALUES (%s, %s, %s, %s)"
+        query = "INSERT INTO Student (name, class, section, dob) VALUES (?, ?, ?, ?)"
         return execute_query(query, (name, class_name, section, dob))
 
     @staticmethod
@@ -33,7 +33,7 @@ class Student:
     @staticmethod
     def get_student_by_id(student_id: int) -> tuple:
         """Get student by ID"""
-        query = "SELECT student_id, name, class, section, dob FROM Student WHERE student_id = %s"
+        query = "SELECT student_id, name, class, section, dob FROM Student WHERE student_id = ?"
         return fetch_one(query, (student_id,))
 
     @staticmethod
@@ -42,9 +42,9 @@ class Student:
         query = """
         SELECT student_id, name, class, section, dob, created_at 
         FROM Student 
-        WHERE (name LIKE %s OR %s = '')
-        AND (class = %s OR %s = '')
-        AND (section = %s OR %s = '')
+        WHERE (name LIKE ? OR ? = '')
+        AND (class = ? OR ? = '')
+        AND (section = ? OR ? = '')
         ORDER BY class, section, name
         """
         search_pattern = f"%{search_term}%"
@@ -56,25 +56,25 @@ class Student:
         """Update existing student"""
         query = """
         UPDATE Student 
-        SET name = %s, class = %s, section = %s, dob = %s 
-        WHERE student_id = %s
+        SET name = ?, class = ?, section = ?, dob = ? 
+        WHERE student_id = ?
         """
         return execute_query(query, (name, class_name, section, dob, student_id))
 
     @staticmethod
     def delete_student(student_id: int) -> bool:
         """Delete student and all associated marks"""
-        query = "DELETE FROM Student WHERE student_id = %s"
+        query = "DELETE FROM Student WHERE student_id = ?"
         return execute_query(query, (student_id,))
 
     @staticmethod
     def get_students_by_class(class_name: str, section: str = None) -> list:
         """Get students by class and optionally by section"""
         if section:
-            query = "SELECT student_id, name, class, section FROM Student WHERE class = %s AND section = %s"
+            query = "SELECT student_id, name, class, section FROM Student WHERE class = ? AND section = ?"
             return fetch_all(query, (class_name, section))
         else:
-            query = "SELECT student_id, name, class, section FROM Student WHERE class = %s"
+            query = "SELECT student_id, name, class, section FROM Student WHERE class = ?"
             return fetch_all(query, (class_name,))
 
     @staticmethod
