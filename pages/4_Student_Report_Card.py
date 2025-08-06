@@ -1,5 +1,5 @@
 """
-Student Report Card Page - Individual student performance reports
+Student Report Card Page - Individual student performance reports (SQLite version)
 """
 import streamlit as st
 import pandas as pd
@@ -11,10 +11,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.student import Student
-from models.subject import Subject
 from models.marks import Marks
-from utils.export import export_student_report_card
-from utils.ui_components import create_grade_badge, create_status_badge
 
 st.set_page_config(
     page_title="Student Report Cards",
@@ -82,8 +79,8 @@ if student_id:
 
             with col2:
                 st.metric("Overall Grade", student_summary['overall_grade'])
-                st.markdown(create_status_badge(student_summary['pass_fail_status'], 
-                                              student_summary['overall_percentage']))
+                status_color = "🟢" if student_summary['pass_fail_status'] == "Pass" else "🔴"
+                st.markdown(f"**Status:** {status_color} {student_summary['pass_fail_status']}")
 
             with col3:
                 st.metric("Overall Percentage", f"{student_summary['overall_percentage']}%")
@@ -133,13 +130,12 @@ if student_id:
 
                 subject_data.append({
                     'Subject': subject['subject'],
-                    'Marks Obtained': subject['marks_obtained'],
-                    'Maximum Marks': subject['max_marks'],
+                    'Marks': f"{subject['marks_obtained']}/{subject['max_marks']}",
                     'Percentage': f"{subject['percentage']:.1f}%",
                     'Grade': subject['grade'],
                     'Status': status,
-                    'Assessment Date': subject['assessment_date'],
-                    'Assessment Type': subject['assessment_type']
+                    'Date': subject['assessment_date'],
+                    'Type': subject['assessment_type']
                 })
 
             # Display table
@@ -151,13 +147,12 @@ if student_id:
                 hide_index=True,
                 column_config={
                     "Subject": st.column_config.TextColumn("Subject", width="medium"),
-                    "Marks Obtained": st.column_config.NumberColumn("Marks", width="small"),
-                    "Maximum Marks": st.column_config.NumberColumn("Max", width="small"),
-                    "Percentage": st.column_config.TextColumn("Percentage", width="small"),
+                    "Marks": st.column_config.TextColumn("Marks", width="small"),
+                    "Percentage": st.column_config.TextColumn("%", width="small"),
                     "Grade": st.column_config.TextColumn("Grade", width="small"),
                     "Status": st.column_config.TextColumn("Status", width="small"),
-                    "Assessment Date": st.column_config.DateColumn("Date", width="medium"),
-                    "Assessment Type": st.column_config.TextColumn("Type", width="small")
+                    "Date": st.column_config.DateColumn("Date", width="medium"),
+                    "Type": st.column_config.TextColumn("Type", width="small")
                 }
             )
 
@@ -209,7 +204,7 @@ if student_id:
                 else:
                     st.success("🎉 No subjects need immediate attention!")
 
-            # Grade Analysis Chart Data (for visualization)
+            # Grade Analysis
             st.markdown("### 📊 Grade Distribution")
 
             grade_counts = {}
@@ -241,13 +236,6 @@ if student_id:
             col1, col2 = st.columns(2)
 
             with col1:
-                # PDF Export
-                try:
-                    export_student_report_card(student_summary, student_summary['subject_details'])
-                except Exception as e:
-                    st.error(f"PDF export error: {str(e)}")
-
-            with col2:
                 # CSV Export
                 if st.button("📊 Export to CSV", use_container_width=True):
                     csv_data = df.to_csv(index=False)
@@ -258,78 +246,24 @@ if student_id:
                         mime="text/csv"
                     )
 
-            # Additional Information
-            st.markdown("---")
-            with st.expander("📋 Additional Information"):
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown("**Assessment Summary:**")
-                    assessment_types = {}
-                    for subject in student_summary['subject_details']:
-                        assessment_type = subject['assessment_type']
-                        assessment_types[assessment_type] = assessment_types.get(assessment_type, 0) + 1
-
-                    for assessment_type, count in assessment_types.items():
-                        st.write(f"• {assessment_type}: {count} assessment(s)")
-
-                with col2:
-                    st.markdown("**Performance Trends:**")
-
-                    # Calculate some basic trends
-                    recent_assessments = sorted(student_summary['subject_details'], 
-                                              key=lambda x: x['assessment_date'], reverse=True)
-
-                    if len(recent_assessments) >= 2:
-                        recent_avg = sum(s['percentage'] for s in recent_assessments[:3]) / min(3, len(recent_assessments))
-                        older_avg = sum(s['percentage'] for s in recent_assessments[3:6]) / max(1, len(recent_assessments[3:6]))
-
-                        if recent_avg > older_avg:
-                            st.success("📈 Performance is improving")
-                        elif recent_avg < older_avg:
-                            st.warning("📉 Performance needs attention")
-                        else:
-                            st.info("📊 Performance is stable")
-                    else:
-                        st.info("Need more assessments for trend analysis")
+            with col2:
+                st.info("PDF export feature coming soon!")
 
         except Exception as e:
             st.error(f"Error generating report card: {str(e)}")
 
-# Help section
-with st.expander("ℹ️ Help & Usage"):
-    st.markdown("""
-    ### Report Card Features:
+# Navigation buttons
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
 
-    **Overview:**
-    - Complete academic performance summary
-    - Subject-wise detailed breakdown
-    - Grade analysis and recommendations
-    - Export capabilities (PDF/CSV)
+with col1:
+    if st.button("🏠 Back to Dashboard"):
+        st.switch_page("app.py")
 
-    **Performance Metrics:**
-    - Overall percentage and grade
-    - Pass/fail status per subject
-    - Strengths and improvement areas
-    - Assessment type breakdown
+with col2:
+    if st.button("📝 Enter Marks"):
+        st.switch_page("pages/3_Enter_Update_Marks.py")
 
-    **Grading System:**
-    - A+: 90-100% (Excellent)
-    - A: 80-89% (Very Good)
-    - B+: 70-79% (Good)
-    - B: 60-69% (Satisfactory)
-    - C+: 50-59% (Average)
-    - C: 40-49% (Pass)
-    - F: Below 40% (Fail)
-
-    **Export Options:**
-    - PDF: Professional report card format
-    - CSV: Data for further analysis
-    - Customized filename with student name and date
-
-    **Tips:**
-    - Regular report card review helps track progress
-    - Share reports with parents/guardians
-    - Use recommendations for focused improvement
-    - Compare with class averages for context
-    """)
+with col3:
+    if st.button("📊 Class Analytics"):
+        st.switch_page("pages/5_Class_Analytics.py")
