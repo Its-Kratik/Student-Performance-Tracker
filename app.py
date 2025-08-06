@@ -1,5 +1,5 @@
 """
-Student Performance Tracker - Main Application
+Student Performance Tracker - Main Application (SQLite Version)
 Streamlit-based academic performance management system
 """
 import streamlit as st
@@ -13,11 +13,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import custom modules
 from db.db_init import initialize_database
+from db.connection import get_database_info
 from models.student import Student
 from models.subject import Subject
 from models.marks import Marks
-from utils.analytics import PerformanceAnalytics, display_analytics_metrics
-from utils.ui_components import SessionStateManager, display_loading_spinner
 
 # Page configuration
 st.set_page_config(
@@ -58,14 +57,14 @@ st.markdown("""
 
 def initialize_app():
     """Initialize the application"""
-    SessionStateManager.initialize_session_state()
 
     # Initialize database if needed
     if 'db_initialized' not in st.session_state:
-        with st.spinner("Initializing database..."):
+        with st.spinner("Initializing SQLite database..."):
             try:
                 if initialize_database():
                     st.session_state.db_initialized = True
+                    st.success("✅ Database initialized successfully!")
                 else:
                     st.error("Failed to initialize database")
                     return False
@@ -80,22 +79,64 @@ def display_dashboard():
     # Header
     st.markdown('<h1 class="main-header">🎓 Student Performance Tracker</h1>', unsafe_allow_html=True)
     st.markdown("### Welcome to your comprehensive academic performance management system")
+    st.info("📋 **SQLite Version** - Ready to use without external database setup!")
 
     # Quick stats
     with st.spinner("Loading dashboard data..."):
         try:
-            stats = PerformanceAnalytics.get_overall_statistics()
-            display_analytics_metrics(stats)
+            # Get basic statistics
+            students = Student.get_all_students()
+            subjects = Subject.get_all_subjects()
+            marks = Marks.get_all_marks()
+
+            # Calculate overall statistics
+            student_count = len(students) if students else 0
+            subject_count = len(subjects) if subjects else 0
+            marks_count = len(marks) if marks else 0
+
+            # Calculate overall pass rate
+            if marks:
+                passing_marks = sum(1 for mark in marks 
+                                  if Marks.calculate_percentage(mark[3], mark[4]) >= 40)
+                pass_rate = (passing_marks / marks_count * 100) if marks_count > 0 else 0
+            else:
+                pass_rate = 0
+
+            # Calculate overall average
+            if marks:
+                total_obtained = sum(mark[3] for mark in marks)
+                total_possible = sum(mark[4] for mark in marks)
+                overall_avg = (total_obtained / total_possible * 100) if total_possible > 0 else 0
+            else:
+                overall_avg = 0
+
+            # Display metrics
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Total Students", student_count)
+
+            with col2:
+                st.metric("Total Subjects", subject_count)
+
+            with col3:
+                st.metric("Total Assessments", marks_count)
+
+            with col4:
+                st.metric("Overall Average", f"{overall_avg:.1f}%")
+
         except Exception as e:
             st.error(f"Error loading statistics: {str(e)}")
             # Fallback stats
-            stats = {
-                'total_students': 0,
-                'total_subjects': 0,
-                'total_assessments': 0,
-                'overall_average': 0,
-                'pass_rate': 0
-            }
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Students", 0)
+            with col2:
+                st.metric("Total Subjects", 0)
+            with col3:
+                st.metric("Total Assessments", 0)
+            with col4:
+                st.metric("Overall Average", "0%")
 
     st.markdown("---")
 
@@ -128,14 +169,14 @@ def display_dashboard():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### Latest Students Added")
+        st.markdown("#### Latest Students")
         try:
-            recent_students = Student.get_all_students()[:5]  # Last 5 students
+            recent_students = Student.get_all_students()[:5]  # First 5 students
             if recent_students:
                 for student in recent_students:
-                    st.write(f"• {student[1]} - {student[2]}-{student[3]}")
+                    st.write(f"• {student[1]} - Class {student[2]}-{student[3]}")
             else:
-                st.info("No students found")
+                st.info("No students found - start by adding some students!")
         except Exception as e:
             st.warning("Could not load recent students")
 
@@ -147,31 +188,39 @@ def display_dashboard():
                 for subject in subjects:
                     st.write(f"• {subject[1]}")
             else:
-                st.info("No subjects found")
+                st.info("No subjects found - add subjects to get started!")
         except Exception as e:
             st.warning("Could not load subjects")
 
     # Grade distribution preview
     st.markdown("---")
-    st.subheader("📊 Grade Distribution Preview")
+    st.subheader("📊 System Overview")
 
     try:
-        grade_data = PerformanceAnalytics.get_grade_distribution()
-        if grade_data['total_students'] > 0:
-            # Create a simple grade distribution display
-            grade_counts = grade_data['grade_counts']
+        marks = Marks.get_all_marks()
+        if marks:
+            # Calculate grade distribution
+            grade_counts = {}
+            for mark in marks:
+                percentage = Marks.calculate_percentage(mark[3], mark[4])
+                grade = Marks.calculate_grade(percentage)
+                grade_counts[grade] = grade_counts.get(grade, 0) + 1
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("A+ Students", grade_counts.get('A+', 0))
+                a_count = grade_counts.get('A+', 0) + grade_counts.get('A', 0)
+                st.metric("A Grades", a_count)
             with col2:
-                st.metric("A Students", grade_counts.get('A', 0))
+                b_count = grade_counts.get('B+', 0) + grade_counts.get('B', 0)
+                st.metric("B Grades", b_count)
             with col3:
-                st.metric("B+ Students", grade_counts.get('B+', 0))
+                c_count = grade_counts.get('C+', 0) + grade_counts.get('C', 0)
+                st.metric("C Grades", c_count)
             with col4:
-                st.metric("Failing Students", grade_counts.get('F', 0))
+                f_count = grade_counts.get('F', 0)
+                st.metric("Failing Grades", f_count)
         else:
-            st.info("No grade data available yet")
+            st.info("📝 No marks data available yet. Enter some assessments to see grade distribution!")
 
     except Exception as e:
         st.info("Grade distribution will appear when marks are entered")
@@ -179,67 +228,81 @@ def display_dashboard():
 def display_sidebar():
     """Display sidebar navigation"""
     with st.sidebar:
-        st.title("🎓 Navigation")
+        st.title("🎓 Student Tracker")
+        st.caption("SQLite Edition")
 
         # Navigation menu
-        pages = [
-            {"name": "🏠 Dashboard", "file": "app.py"},
-            {"name": "👥 Manage Students", "file": "pages/1_Manage_Students.py"},
-            {"name": "📚 Manage Subjects", "file": "pages/2_Manage_Subjects.py"},
-            {"name": "📝 Enter Marks", "file": "pages/3_Enter_Update_Marks.py"},
-            {"name": "📋 Report Cards", "file": "pages/4_Student_Report_Card.py"},
-            {"name": "📊 Class Analytics", "file": "pages/5_Class_Analytics.py"},
-            {"name": "📈 Visual Reports", "file": "pages/6_Visual_Reports.py"},
-            {"name": "⚙️ Settings", "file": "pages/7_Settings.py"}
-        ]
+        st.subheader("📋 Navigation")
 
-        for page in pages:
-            if st.button(page["name"], use_container_width=True):
-                if page["file"] != "app.py":
-                    st.switch_page(page["file"])
+        if st.button("🏠 Dashboard", use_container_width=True):
+            st.rerun()
+
+        if st.button("👥 Students", use_container_width=True):
+            st.switch_page("pages/1_Manage_Students.py")
+
+        if st.button("📚 Subjects", use_container_width=True):
+            st.switch_page("pages/2_Manage_Subjects.py")
+
+        if st.button("📝 Enter Marks", use_container_width=True):
+            st.switch_page("pages/3_Enter_Update_Marks.py")
+
+        if st.button("📋 Report Cards", use_container_width=True):
+            st.switch_page("pages/4_Student_Report_Card.py")
+
+        if st.button("📊 Analytics", use_container_width=True):
+            st.switch_page("pages/5_Class_Analytics.py")
 
         st.markdown("---")
 
-        # System status
-        st.subheader("📊 System Status")
+        # Database status
+        st.subheader("📊 Database Status")
 
         try:
-            # Check database connection
-            students = Student.get_all_students()
-            st.success("✅ Database Connected")
+            # Get database info
+            db_info = get_database_info()
 
-            # Display basic stats
-            student_count = len(students) if students else 0
-            subjects = Subject.get_all_subjects()
-            subject_count = len(subjects) if subjects else 0
+            if db_info.get('database_exists'):
+                st.success("✅ SQLite Database Connected")
 
-            st.metric("Students", student_count)
-            st.metric("Subjects", subject_count)
+                # Display basic stats
+                st.metric("Students", db_info.get('student_count', 0))
+                st.metric("Subjects", db_info.get('subject_count', 0))
+                st.metric("Assessments", db_info.get('marks_count', 0))
+
+                # Database file size
+                db_size = db_info.get('database_size', 0)
+                if db_size > 0:
+                    size_mb = db_size / (1024 * 1024)
+                    st.caption(f"Database size: {size_mb:.2f} MB")
+            else:
+                st.warning("⚠️ Database file not found")
 
         except Exception as e:
             st.error("❌ Database Connection Error")
-            st.warning("Please check your database configuration")
+            st.caption("Database will be created automatically")
 
         st.markdown("---")
 
-        # About section
-        with st.expander("ℹ️ About"):
+        # Quick help
+        with st.expander("ℹ️ Quick Help"):
             st.markdown("""
-            **Student Performance Tracker v1.0**
+            **Getting Started:**
+            1. Add students in "Students" section
+            2. Add subjects in "Subjects" section  
+            3. Enter marks in "Enter Marks"
+            4. View reports and analytics
 
-            A comprehensive academic performance management system built with:
-            - Python 3.x
-            - Streamlit
-            - MySQL/SQLite
-            - Pandas
-            - Altair/Plotly
+            **Features:**
+            - No external database required
+            - Automatic grade calculation
+            - Performance analytics
+            - Export capabilities
 
-            Features:
-            - Student & Subject Management
-            - Marks Entry & Tracking
-            - Performance Analytics
-            - Report Generation
-            - Data Export (PDF/CSV)
+            **SQLite Benefits:**
+            - Zero configuration
+            - Portable database file
+            - Fast and reliable
+            - Perfect for single-user scenarios
             """)
 
 def main():
@@ -258,8 +321,8 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 20px;'>
-        <p>Student Performance Tracker | Built with ❤️ using Streamlit</p>
-        <p>📧 Support: admin@studenttracker.com | 📞 Help: +1-234-567-8900</p>
+        <p>🎓 <strong>Student Performance Tracker</strong> | SQLite Edition</p>
+        <p>Built with ❤️ using Streamlit & SQLite</p>
     </div>
     """, unsafe_allow_html=True)
 
