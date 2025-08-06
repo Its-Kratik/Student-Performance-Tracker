@@ -1,5 +1,5 @@
 """
-Enter/Update Marks Page - Marks entry and management
+Enter/Update Marks Page - Marks entry and management (SQLite version)
 """
 import streamlit as st
 import pandas as pd
@@ -11,10 +11,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.student import Student
-from models.subject import Subject, subject_selector
+from models.subject import Subject
 from models.marks import Marks, display_marks_table
-from utils.ui_components import paginate_data, display_pagination_controls
-from utils.validations import validate_marks, validate_assessment_date
 
 st.set_page_config(
     page_title="Enter Marks",
@@ -30,11 +28,11 @@ with st.sidebar:
     st.subheader("Marks Management")
     action = st.radio(
         "Choose Action:",
-        ["Enter New Marks", "View All Marks", "Update Marks", "Bulk Entry", "Delete Marks"],
+        ["Enter New Marks", "View All Marks", "Update Marks", "Delete Marks"],
         key="marks_action"
     )
 
-# Helper function to get student options
+# Helper functions
 def get_student_options():
     """Get formatted student options for selectbox"""
     students = Student.get_all_students()
@@ -43,7 +41,6 @@ def get_student_options():
                 for student in students}
     return {}
 
-# Helper function to get subject options
 def get_subject_options():
     """Get formatted subject options for selectbox"""
     subjects = Subject.get_all_subjects()
@@ -131,10 +128,9 @@ if action == "Enter New Marks":
 
             if submitted:
                 # Validate input
-                is_valid_marks, marks_errors = validate_marks(marks_obtained, max_marks)
-                is_valid_date, date_errors = validate_assessment_date(assessment_date)
+                is_valid, errors = Marks.validate_marks_data(marks_obtained, max_marks, assessment_date)
 
-                if is_valid_marks and is_valid_date and student_id and subject_id:
+                if is_valid and student_id and subject_id:
                     # Add marks to database
                     success = Marks.add_marks(
                         student_id, subject_id, marks_obtained, max_marks, 
@@ -158,7 +154,7 @@ if action == "Enter New Marks":
                         st.error("❌ Failed to add marks. Please try again.")
                 else:
                     # Display validation errors
-                    for error in marks_errors + date_errors:
+                    for error in errors:
                         st.error(f"❌ {error}")
 
 elif action == "View All Marks":
@@ -197,19 +193,8 @@ elif action == "View All Marks":
                     filtered_data = [mark for mark in filtered_data if mark[6] == selected_type]
 
                 if filtered_data:
-                    # Pagination
-                    page_size = st.selectbox("Records per page:", [10, 25, 50, 100], index=0)
-                    paginated_data, current_page, total_pages, total_items = paginate_data(
-                        filtered_data, page_size, "marks"
-                    )
-
-                    st.info(f"Showing {len(paginated_data)} of {total_items} records (Page {current_page} of {total_pages})")
-
-                    # Display table
-                    display_marks_table(paginated_data)
-
-                    # Pagination controls
-                    display_pagination_controls(current_page, total_pages, "marks")
+                    st.success(f"Showing {len(filtered_data)} records")
+                    display_marks_table(filtered_data)
 
                     # Export option
                     with st.expander("📥 Export Marks"):
@@ -314,10 +299,9 @@ elif action == "Update Marks":
 
                         if update_submitted:
                             # Validate input
-                            is_valid_marks, marks_errors = validate_marks(new_marks_obtained, new_max_marks)
-                            is_valid_date, date_errors = validate_assessment_date(new_assessment_date)
+                            is_valid, errors = Marks.validate_marks_data(new_marks_obtained, new_max_marks, new_assessment_date)
 
-                            if is_valid_marks and is_valid_date:
+                            if is_valid:
                                 # Update marks in database
                                 success = Marks.update_marks(
                                     mark_id, new_marks_obtained, new_max_marks,
@@ -340,123 +324,13 @@ elif action == "Update Marks":
                                     st.error("❌ Failed to update marks. Please try again.")
                             else:
                                 # Display validation errors
-                                for error in marks_errors + date_errors:
+                                for error in errors:
                                     st.error(f"❌ {error}")
         else:
             st.info("No marks available for update")
 
     except Exception as e:
         st.error(f"Error loading marks for update: {str(e)}")
-
-elif action == "Bulk Entry":
-    st.subheader("📊 Bulk Marks Entry")
-    st.info("Enter marks for multiple students at once for a specific subject and assessment")
-
-    # Select subject and assessment details
-    subjects = Subject.get_all_subjects()
-    students = Student.get_all_students()
-
-    if not subjects or not students:
-        st.warning("⚠️ Please ensure both students and subjects are available before bulk entry")
-    else:
-        with st.form("bulk_entry_form"):
-            col1, col2 = st.columns(2)
-
-            with col1:
-                # Subject selection
-                subject_options = get_subject_options()
-                selected_subject_key = st.selectbox(
-                    "Select Subject *",
-                    options=list(subject_options.keys()),
-                    help="Choose subject for bulk entry"
-                )
-                subject_id = subject_options.get(selected_subject_key)
-
-                # Assessment details
-                max_marks = st.number_input(
-                    "Maximum Marks *",
-                    min_value=1,
-                    max_value=1000,
-                    value=100
-                )
-
-            with col2:
-                assessment_date = st.date_input(
-                    "Assessment Date *",
-                    value=date.today(),
-                    max_value=date.today()
-                )
-
-                assessment_type = st.selectbox(
-                    "Assessment Type *",
-                    options=["Assignment", "Quiz", "Midterm", "Final"]
-                )
-
-            # Class/Section filter for students
-            class_filter = st.selectbox(
-                "Filter by Class (optional):",
-                options=["All"] + Student.get_unique_classes()
-            )
-
-            section_filter = st.selectbox(
-                "Filter by Section (optional):",
-                options=["All"] + Student.get_unique_sections()
-            )
-
-            submitted = st.form_submit_button("Prepare Bulk Entry", type="primary")
-
-        if submitted and subject_id:
-            # Get filtered students
-            if class_filter != "All" or section_filter != "All":
-                filtered_students = Student.search_students(
-                    class_filter=class_filter if class_filter != "All" else "",
-                    section_filter=section_filter if section_filter != "All" else ""
-                )
-            else:
-                filtered_students = students
-
-            if filtered_students:
-                st.subheader("Enter Marks for Each Student")
-
-                marks_data = []
-
-                # Create form for each student
-                with st.form("bulk_marks_form"):
-                    for i, student in enumerate(filtered_students):
-                        col1, col2 = st.columns([2, 1])
-                        with col1:
-                            st.write(f"**{student[1]}** (Class {student[2]}-{student[3]})")
-                        with col2:
-                            marks = st.number_input(
-                                f"Marks",
-                                min_value=0,
-                                max_value=max_marks,
-                                value=0,
-                                key=f"marks_{student[0]}",
-                                help=f"Enter marks for {student[1]}"
-                            )
-                            marks_data.append((student[0], marks))
-
-                    bulk_submitted = st.form_submit_button("Submit All Marks", type="primary")
-
-                if bulk_submitted:
-                    success_count = 0
-                    error_count = 0
-
-                    for student_id, marks_obtained in marks_data:
-                        if marks_obtained > 0:  # Only add if marks entered
-                            is_valid, _ = validate_marks(marks_obtained, max_marks)
-                            if is_valid:
-                                if Marks.add_marks(student_id, subject_id, marks_obtained, 
-                                                 max_marks, assessment_date, assessment_type):
-                                    success_count += 1
-                                else:
-                                    error_count += 1
-
-                    if success_count > 0:
-                        st.success(f"✅ Successfully added marks for {success_count} students!")
-                    if error_count > 0:
-                        st.warning(f"⚠️ Failed to add marks for {error_count} students")
 
 elif action == "Delete Marks":
     st.subheader("🗑️ Delete Marks")
@@ -547,36 +421,18 @@ with st.sidebar:
     except Exception as e:
         st.error("Could not load statistics")
 
-# Help section
-with st.expander("ℹ️ Help & Tips"):
-    st.markdown("""
-    ### Marks Entry Tips:
+# Navigation buttons
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
 
-    **Single Entry:**
-    - Select student and subject from dropdowns
-    - Enter marks obtained and maximum marks
-    - Choose appropriate assessment type
-    - Marks will be automatically graded
+with col1:
+    if st.button("🏠 Back to Dashboard"):
+        st.switch_page("app.py")
 
-    **Bulk Entry:**
-    - Choose subject and assessment details first
-    - Filter students by class/section if needed
-    - Enter marks for multiple students at once
-    - Only students with marks > 0 will be saved
+with col2:
+    if st.button("👥 Manage Students"):
+        st.switch_page("pages/1_Manage_Students.py")
 
-    **Grading System:**
-    - A+: 90-100%
-    - A: 80-89%
-    - B+: 70-79%
-    - B: 60-69%
-    - C+: 50-59%
-    - C: 40-49%
-    - F: Below 40%
-
-    **Best Practices:**
-    - Enter assessment date accurately
-    - Use consistent assessment types
-    - Double-check marks before submission
-    - Use bulk entry for class-wide assessments
-    - Regular backup of marks data
-    """)
+with col3:
+    if st.button("📋 View Reports"):
+        st.switch_page("pages/4_Student_Report_Card.py")
