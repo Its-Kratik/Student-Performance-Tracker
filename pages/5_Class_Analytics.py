@@ -1,5 +1,5 @@
 """
-Class Analytics Page - Class and section-wise performance analysis
+Class Analytics Page - Class and section-wise performance analysis (SQLite version)
 """
 import streamlit as st
 import pandas as pd
@@ -11,9 +11,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.student import Student
 from models.marks import Marks
-from utils.analytics import PerformanceAnalytics, display_analytics_metrics
-from utils.export import export_class_summary
-from utils.ui_components import create_grade_badge, create_status_badge
 
 st.set_page_config(
     page_title="Class Analytics",
@@ -70,7 +67,7 @@ with st.sidebar:
                (f"-{selected_section}" if selected_section != "All" else ""))
 
 # Main analytics content
-col1, col2 = st.columns([2, 1])
+col1, col2 = st.columns([3, 1])
 
 with col1:
     if selected_class != "All":
@@ -117,7 +114,7 @@ with col1:
                             top_performers_data.append({
                                 'Rank': i,
                                 'Name': student['name'],
-                                'Percentage': f"{student['percentage']}%",
+                                'Percentage': f"{student['percentage']:.1f}%",
                                 'Grade': student['grade'],
                                 'Subjects': student['subjects_count']
                             })
@@ -233,19 +230,14 @@ with col1:
                     st.markdown("---")
                     st.markdown("### 📥 Export Class Report")
 
-                    col1_1, col1_2 = st.columns(2)
-
-                    with col1_1:
-                        try:
-                            export_class_summary(class_analytics, class_analytics['student_summaries'], "pdf")
-                        except Exception as e:
-                            st.error(f"PDF export error: {str(e)}")
-
-                    with col1_2:
-                        try:
-                            export_class_summary(class_analytics, class_analytics['student_summaries'], "csv")
-                        except Exception as e:
-                            st.error(f"CSV export error: {str(e)}")
+                    if st.button("📊 Export to CSV", use_container_width=True):
+                        csv_data = df_all.to_csv(index=False)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv_data,
+                            file_name=f"class_report_{selected_class}_{selected_section}_{date.today().strftime('%Y%m%d')}.csv",
+                            mime="text/csv"
+                        )
 
             except Exception as e:
                 st.error(f"Error analyzing class performance: {str(e)}")
@@ -257,82 +249,55 @@ with col1:
         with st.spinner("Loading system analytics..."):
             try:
                 # Get overall statistics
-                overall_stats = PerformanceAnalytics.get_overall_statistics()
-                display_analytics_metrics(overall_stats)
+                all_marks = Marks.get_all_marks()
 
-                # Class-wise performance comparison
-                st.markdown("### 📊 Class-wise Performance Comparison")
+                if all_marks:
+                    # Calculate overall stats
+                    total_assessments = len(all_marks)
+                    total_obtained = sum(mark[3] for mark in all_marks)
+                    total_possible = sum(mark[4] for mark in all_marks)
+                    overall_avg = (total_obtained / total_possible * 100) if total_possible > 0 else 0
 
-                class_performance = PerformanceAnalytics.get_class_wise_performance()
+                    # Pass rate
+                    passing_assessments = sum(1 for mark in all_marks 
+                                            if Marks.calculate_percentage(mark[3], mark[4]) >= 40)
+                    pass_rate = (passing_assessments / total_assessments * 100) if total_assessments > 0 else 0
 
-                if class_performance:
-                    class_df_data = []
-                    for class_data in class_performance:
-                        class_df_data.append({
-                            'Class': f"{class_data['class']}-{class_data['section']}",
-                            'Students': class_data['total_students'],
-                            'With Marks': class_data['students_with_marks'],
-                            'Assessments': class_data['total_assessments'],
-                            'Average %': f"{class_data['avg_percentage']:.1f}%",
-                            'Pass Count': class_data['pass_count'],
-                            'Pass %': f"{class_data['pass_percentage']:.1f}%"
-                        })
+                    col1_1, col1_2, col1_3, col1_4 = st.columns(4)
 
-                    class_df = pd.DataFrame(class_df_data)
-                    st.dataframe(
-                        class_df,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    with col1_1:
+                        st.metric("Total Students", len(students))
 
-                # Subject performance comparison
-                st.markdown("### 📚 Subject Performance Comparison")
+                    with col1_2:
+                        st.metric("Total Assessments", total_assessments)
 
-                subject_performance = PerformanceAnalytics.get_subject_performance_comparison()
+                    with col1_3:
+                        st.metric("Overall Average", f"{overall_avg:.1f}%")
 
-                if subject_performance:
-                    subject_df_data = []
-                    for subject_data in subject_performance:
-                        subject_df_data.append({
-                            'Subject': subject_data['subject'],
-                            'Assessments': subject_data['total_assessments'],
-                            'Avg Marks': f"{subject_data['avg_marks']:.1f}",
-                            'Avg %': f"{subject_data['avg_percentage']:.1f}%",
-                            'Grade': subject_data['grade'],
-                            'Highest': subject_data['highest_marks'],
-                            'Lowest': subject_data['lowest_marks']
-                        })
+                    with col1_4:
+                        st.metric("Pass Rate", f"{pass_rate:.1f}%")
 
-                    subject_df = pd.DataFrame(subject_df_data)
-                    st.dataframe(
-                        subject_df,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    # Class-wise performance comparison
+                    st.markdown("### 📊 Class-wise Performance")
 
-                # Top performers across all classes
-                st.markdown("### 🏆 Top Performers (All Classes)")
+                    class_performance = []
+                    for class_name in unique_classes:
+                        for section in unique_sections:
+                            class_analytics = Marks.get_class_analytics(class_name, section)
+                            if class_analytics['total_students'] > 0:
+                                class_performance.append({
+                                    'Class-Section': f"{class_name}-{section}",
+                                    'Students': class_analytics['total_students'],
+                                    'Average %': f"{class_analytics['class_average']:.1f}%",
+                                    'Pass Count': class_analytics['pass_count'],
+                                    'Pass %': f"{class_analytics['pass_percentage']:.1f}%"
+                                })
 
-                top_performers = PerformanceAnalytics.get_top_performers(limit=10)
-
-                if top_performers:
-                    top_df_data = []
-                    for performer in top_performers:
-                        top_df_data.append({
-                            'Rank': performer['rank'],
-                            'Name': performer['name'],
-                            'Class': f"{performer['class']}-{performer['section']}",
-                            'Percentage': f"{performer['percentage']:.1f}%",
-                            'Grade': performer['grade'],
-                            'Subjects': performer['total_subjects']
-                        })
-
-                    top_df = pd.DataFrame(top_df_data)
-                    st.dataframe(
-                        top_df,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    if class_performance:
+                        class_df = pd.DataFrame(class_performance)
+                        st.dataframe(class_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No marks data available for system-wide analysis")
 
             except Exception as e:
                 st.error(f"Error loading system analytics: {str(e)}")
@@ -348,17 +313,18 @@ with col2:
             if selected_section != "All":
                 class_students = [s for s in class_students if s[3] == selected_section]
 
-            st.metric("Total Students in Class", len(class_students))
+            st.metric("Students in Class", len(class_students))
 
             # Get marks for this class
             all_marks = Marks.get_all_marks()
             class_marks = []
             for mark in all_marks:
-                # Find student info
-                student_info = next((s for s in students if s[0] == mark[8]), None)
-                if student_info and student_info[2] == selected_class:
-                    if selected_section == "All" or student_info[3] == selected_section:
-                        class_marks.append(mark)
+                # Find student info by matching student name and checking class/section
+                for student in students:
+                    if student[1] == mark[1] and student[2] == selected_class:
+                        if selected_section == "All" or student[3] == selected_section:
+                            class_marks.append(mark)
+                            break
 
             if class_marks:
                 total_assessments = len(class_marks)
@@ -368,7 +334,7 @@ with col2:
                 recent_marks = sorted(class_marks, key=lambda x: x[7], reverse=True)[:5]
 
                 st.markdown("**Recent Assessments:**")
-                for mark in recent_marks:
+                for mark in recent_marks[:5]:
                     percentage = Marks.calculate_percentage(mark[3], mark[4])
                     st.write(f"• {mark[1]}: {mark[2]} ({percentage:.1f}%)")
         else:
@@ -397,49 +363,24 @@ with col2:
     if st.button("📝 Enter Marks", use_container_width=True):
         st.switch_page("pages/3_Enter_Update_Marks.py")
 
-    if st.button("📋 View Report Cards", use_container_width=True):
+    if st.button("📋 Report Cards", use_container_width=True):
         st.switch_page("pages/4_Student_Report_Card.py")
 
-    if st.button("📈 Visual Reports", use_container_width=True):
-        st.switch_page("pages/6_Visual_Reports.py")
+    if st.button("🏠 Dashboard", use_container_width=True):
+        st.switch_page("app.py")
 
-# Help section
-with st.expander("ℹ️ Help & Analysis Guide"):
-    st.markdown("""
-    ### Class Analytics Features:
+# Navigation buttons
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
 
-    **Class Selection:**
-    - Choose specific class or view all classes
-    - Filter by section within selected class
-    - Compare performance across different groups
+with col1:
+    if st.button("🏠 Back to Dashboard"):
+        st.switch_page("app.py")
 
-    **Performance Metrics:**
-    - **Class Average**: Overall percentage of the class
-    - **Pass Rate**: Percentage of students passing (≥40%)
-    - **Grade Distribution**: Breakdown of grades achieved
-    - **Top Performers**: Highest achieving students
+with col2:
+    if st.button("📝 Enter Marks"):
+        st.switch_page("pages/3_Enter_Update_Marks.py")
 
-    **Insights & Analysis:**
-    - Automated performance insights
-    - Comparison with overall system averages
-    - Identification of areas needing attention
-    - Recent activity tracking
-
-    **Export Options:**
-    - PDF: Professional class summary report
-    - CSV: Data for further analysis and records
-    - Custom reports for different stakeholders
-
-    **Using Analytics:**
-    - Regular monitoring of class performance
-    - Identifying students needing extra support
-    - Recognizing top performers for awards
-    - Planning intervention strategies
-    - Parent-teacher conference preparation
-
-    **Performance Thresholds:**
-    - Excellent: 80%+ average
-    - Good: 60-79% average  
-    - Average: 40-59% average
-    - Below Average: <40% average
-    """)
+with col3:
+    if st.button("📋 View Reports"):
+        st.switch_page("pages/4_Student_Report_Card.py")
