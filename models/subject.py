@@ -1,9 +1,9 @@
 """
-Subject Model - CRUD operations for Subject entity
+Subject Model - CRUD operations for Subject entity (SQLite version)
 """
 import streamlit as st
 import pandas as pd
-from db.mysql_connection import execute_query, fetch_all, fetch_one
+from db.connection import execute_query, fetch_all, fetch_one
 
 class Subject:
     def __init__(self, subject_id=None, subject_name=None):
@@ -13,7 +13,7 @@ class Subject:
     @staticmethod
     def add_subject(subject_name: str) -> bool:
         """Add new subject to database"""
-        query = "INSERT INTO Subject (subject_name) VALUES (%s)"
+        query = "INSERT INTO Subject (subject_name) VALUES (?)"
         return execute_query(query, (subject_name,))
 
     @staticmethod
@@ -25,25 +25,25 @@ class Subject:
     @staticmethod
     def get_subject_by_id(subject_id: int) -> tuple:
         """Get subject by ID"""
-        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_id = %s"
+        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_id = ?"
         return fetch_one(query, (subject_id,))
 
     @staticmethod
     def get_subject_by_name(subject_name: str) -> tuple:
         """Get subject by name"""
-        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_name = %s"
+        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_name = ?"
         return fetch_one(query, (subject_name,))
 
     @staticmethod
     def update_subject(subject_id: int, subject_name: str) -> bool:
         """Update existing subject"""
-        query = "UPDATE Subject SET subject_name = %s WHERE subject_id = %s"
+        query = "UPDATE Subject SET subject_name = ? WHERE subject_id = ?"
         return execute_query(query, (subject_name, subject_id))
 
     @staticmethod
     def delete_subject(subject_id: int) -> bool:
         """Delete subject and all associated marks"""
-        query = "DELETE FROM Subject WHERE subject_id = %s"
+        query = "DELETE FROM Subject WHERE subject_id = ?"
         return execute_query(query, (subject_id,))
 
     @staticmethod
@@ -52,7 +52,7 @@ class Subject:
         query = """
         SELECT subject_id, subject_name, created_at 
         FROM Subject 
-        WHERE subject_name LIKE %s OR %s = ''
+        WHERE subject_name LIKE ? OR ? = ''
         ORDER BY subject_name
         """
         search_pattern = f"%{search_term}%"
