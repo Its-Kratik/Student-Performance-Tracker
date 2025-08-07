@@ -2,6 +2,7 @@
 SQLite Database Connection Module
 Handles database connection and initialization for SQLite
 """
+
 import sqlite3
 import streamlit as st
 import os
@@ -15,26 +16,31 @@ class DatabaseManager:
 
     def __init__(self):
         self.connection = None
-        # Use a database file in the project directory
         self.db_path = Path(__file__).parent.parent / "student_tracker.db"
+
+    def get_connection(self):
+        """Get database connection with optimizations"""
+        try:
+            conn = sqlite3.connect(
+                str(self.db_path),
+                check_same_thread=False,
+                timeout=30.0,
+                isolation_level=None  # Autocommit mode
+            )
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute("PRAGMA cache_size = 1000")
+            conn.execute("PRAGMA temp_store = MEMORY")
+            return conn
+        except Exception as e:
+            st.error(f"Database connection failed: {e}")
+            return None
 
     def connect(self) -> bool:
         """Establish database connection"""
-        try:
-            self.connection = sqlite3.connect(
-                str(self.db_path), 
-                check_same_thread=False,
-                timeout=30.0
-            )
-            # Enable foreign key support and optimize SQLite settings
-            self.connection.execute("PRAGMA foreign_keys = ON")
-            self.connection.execute("PRAGMA journal_mode = WAL")  # Better concurrency
-            self.connection.execute("PRAGMA synchronous = NORMAL")  # Better performance
-            self.connection.commit()
-            return True
-        except Exception as e:
-            st.error(f"Database connection failed: {e}")
-            return False
+        self.connection = self.get_connection()
+        return self.connection is not None
 
     def disconnect(self):
         """Close database connection"""
@@ -45,10 +51,7 @@ class DatabaseManager:
         """Execute INSERT, UPDATE, DELETE queries"""
         try:
             cursor = self.connection.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
+            cursor.execute(query, params or ())
             self.connection.commit()
             cursor.close()
             return True
@@ -60,10 +63,7 @@ class DatabaseManager:
         """Fetch all results from SELECT query"""
         try:
             cursor = self.connection.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
+            cursor.execute(query, params or ())
             result = cursor.fetchall()
             cursor.close()
             return result
@@ -75,10 +75,7 @@ class DatabaseManager:
         """Fetch single result from SELECT query"""
         try:
             cursor = self.connection.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
+            cursor.execute(query, params or ())
             result = cursor.fetchone()
             cursor.close()
             return result
@@ -89,46 +86,34 @@ class DatabaseManager:
 # Global database instance
 @st.cache_resource
 def get_db_connection():
-    """Get cached database connection"""
     db = DatabaseManager()
     if db.connect():
         return db
     return None
 
-# Helper functions
+# Query helper functions
 def execute_query(query: str, params: tuple = None) -> bool:
-    """Execute query using global connection"""
     db = get_db_connection()
-    if db:
-        return db.execute_query(query, params)
-    return False
+    return db.execute_query(query, params) if db else False
 
 def fetch_all(query: str, params: tuple = None) -> list:
-    """Fetch all results using global connection"""
     db = get_db_connection()
-    if db:
-        return db.fetch_all(query, params)
-    return []
+    return db.fetch_all(query, params) if db else []
 
 def fetch_one(query: str, params: tuple = None) -> Optional[tuple]:
-    """Fetch one result using global connection"""
     db = get_db_connection()
-    if db:
-        return db.fetch_one(query, params)
-    return None
+    return db.fetch_one(query, params) if db else None
 
+# Initialization logic
 def initialize_sample_data():
-    """Insert sample data if database is empty"""
     try:
-        # Check if students already exist
         existing_students = fetch_one("SELECT COUNT(*) FROM Student")
         if existing_students and existing_students[0] > 0:
             print("Sample data already exists")
             return True
-            
+
         print("Inserting sample data...")
-        
-        # Sample students data
+
         sample_students = [
             ("Aarav Sharma", "10", "A", "2008-05-20"),
             ("Priya Patel", "10", "A", "2008-03-15"),
@@ -141,60 +126,44 @@ def initialize_sample_data():
             ("Arjun Nair", "12", "A", "2006-04-14"),
             ("Deepika Gupta", "12", "B", "2006-06-08")
         ]
-        
-        # Sample subjects
+
         sample_subjects = [
-            ("Mathematics",),
-            ("Physics",),
-            ("Chemistry",),
-            ("Biology",),
-            ("English",),
-            ("History",),
-            ("Geography",),
-            ("Computer Science",)
+            ("Mathematics",), ("Physics",), ("Chemistry",),
+            ("Biology",), ("English",), ("History",),
+            ("Geography",), ("Computer Science",)
         ]
-        
-        # Insert students
-        students_added = 0
+
         for student in sample_students:
-            if execute_query("INSERT INTO Student (name, class, section, dob) VALUES (?, ?, ?, ?)", student):
-                students_added += 1
-        
-        # Insert subjects
-        subjects_added = 0
+            execute_query("INSERT INTO Student (name, class, section, dob) VALUES (?, ?, ?, ?)", student)
+
         for subject in sample_subjects:
-            if execute_query("INSERT INTO Subject (subject_name) VALUES (?)", subject):
-                subjects_added += 1
-        
-        # Insert sample marks
-        marks_added = 0
-        for student_id in range(1, students_added + 1):
-            for subject_id in range(1, min(6, subjects_added + 1)):  # 5 subjects per student
+            execute_query("INSERT INTO Subject (subject_name) VALUES (?)", subject)
+
+        for student_id in range(1, len(sample_students) + 1):
+            for subject_id in range(1, 6):  # 5 subjects per student
                 marks_obtained = random.randint(45, 95)
                 assessment_date = date.today() - timedelta(days=random.randint(1, 30))
                 assessment_type = random.choice(['Quiz', 'Assignment', 'Midterm', 'Final'])
-                
-                if execute_query(
-                    "INSERT INTO Marks (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type) VALUES (?, ?, ?, ?, ?, ?)",
+                execute_query(
+                    """INSERT INTO Marks 
+                    (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
                     (student_id, subject_id, marks_obtained, 100, assessment_date, assessment_type)
-                ):
-                    marks_added += 1
-        
-        print(f"Sample data inserted: {students_added} students, {subjects_added} subjects, {marks_added} marks")
+                )
+
+        print("Sample data inserted.")
         return True
-        
+
     except Exception as e:
         print(f"Error inserting sample data: {e}")
         return False
 
 def init_database():
-    """Initialize database with tables and sample data if they don't exist"""
     db = get_db_connection()
     if not db:
         return False
 
     try:
-        # Create Student table
         student_table_sql = """
         CREATE TABLE IF NOT EXISTS Student (
             student_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,7 +175,6 @@ def init_database():
         )
         """
 
-        # Create Subject table
         subject_table_sql = """
         CREATE TABLE IF NOT EXISTS Subject (
             subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,7 +183,6 @@ def init_database():
         )
         """
 
-        # Create Marks table
         marks_table_sql = """
         CREATE TABLE IF NOT EXISTS Marks (
             mark_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,24 +199,19 @@ def init_database():
         )
         """
 
-        # Create indexes for better performance
         indexes_sql = [
             "CREATE INDEX IF NOT EXISTS idx_student_class_section ON Student(class, section)",
             "CREATE INDEX IF NOT EXISTS idx_marks_student_subject ON Marks(student_id, subject_id)",
             "CREATE INDEX IF NOT EXISTS idx_marks_assessment_date ON Marks(assessment_date)"
         ]
 
-        # Execute table creation
         for table_sql in [student_table_sql, subject_table_sql, marks_table_sql]:
             db.execute_query(table_sql)
 
-        # Create indexes
         for index_sql in indexes_sql:
             db.execute_query(index_sql)
 
-        # Insert sample data if tables are empty
         initialize_sample_data()
-        
         return True
 
     except Exception as e:
@@ -257,7 +219,6 @@ def init_database():
         return False
 
 def get_database_info():
-    """Get database information and statistics"""
     db = get_db_connection()
     if not db:
         return {}
@@ -266,17 +227,11 @@ def get_database_info():
         info = {
             "database_path": str(db.db_path),
             "database_exists": db.db_path.exists(),
-            "database_size": 0
+            "database_size": db.db_path.stat().st_size if db.db_path.exists() else 0
         }
 
-        if db.db_path.exists():
-            info["database_size"] = db.db_path.stat().st_size
-
-        # Get table counts
-        tables = ["Student", "Subject", "Marks"]
-        for table in tables:
-            count_query = f"SELECT COUNT(*) FROM {table}"
-            result = db.fetch_one(count_query)
+        for table in ["Student", "Subject", "Marks"]:
+            result = db.fetch_one(f"SELECT COUNT(*) FROM {table}")
             info[f"{table.lower()}_count"] = result[0] if result else 0
 
         return info
@@ -285,24 +240,18 @@ def get_database_info():
         st.error(f"Error getting database info: {e}")
         return {}
 
-# Debug function to check database contents
 def debug_database():
-    """Debug function to check database contents"""
     try:
         students = fetch_all("SELECT COUNT(*) FROM Student")
-        subjects = fetch_all("SELECT COUNT(*) FROM Subject") 
+        subjects = fetch_all("SELECT COUNT(*) FROM Subject")
         marks = fetch_all("SELECT COUNT(*) FROM Marks")
-        
+
         print(f"Students: {students[0][0] if students else 0}")
         print(f"Subjects: {subjects[0][0] if subjects else 0}")
         print(f"Marks: {marks[0][0] if marks else 0}")
-        
-        # Show actual student data
+
         all_students = fetch_all("SELECT * FROM Student LIMIT 5")
-        if all_students:
-            print("Sample students:", all_students)
-        else:
-            print("No students found in database")
-            
+        print("Sample students:" if all_students else "No students found", all_students)
+
     except Exception as e:
         print(f"Debug error: {e}")
