@@ -5,8 +5,10 @@ Handles database connection and initialization for SQLite
 import sqlite3
 import streamlit as st
 import os
+import random
 from typing import Optional, Any
 from pathlib import Path
+from datetime import date, timedelta
 
 class DatabaseManager:
     """Database connection manager for SQLite"""
@@ -24,8 +26,10 @@ class DatabaseManager:
                 check_same_thread=False,
                 timeout=30.0
             )
-            # Enable foreign key support
+            # Enable foreign key support and optimize SQLite settings
             self.connection.execute("PRAGMA foreign_keys = ON")
+            self.connection.execute("PRAGMA journal_mode = WAL")  # Better concurrency
+            self.connection.execute("PRAGMA synchronous = NORMAL")  # Better performance
             self.connection.commit()
             return True
         except Exception as e:
@@ -113,8 +117,78 @@ def fetch_one(query: str, params: tuple = None) -> Optional[tuple]:
         return db.fetch_one(query, params)
     return None
 
+def initialize_sample_data():
+    """Insert sample data if database is empty"""
+    try:
+        # Check if students already exist
+        existing_students = fetch_one("SELECT COUNT(*) FROM Student")
+        if existing_students and existing_students[0] > 0:
+            print("Sample data already exists")
+            return True
+            
+        print("Inserting sample data...")
+        
+        # Sample students data
+        sample_students = [
+            ("Aarav Sharma", "10", "A", "2008-05-20"),
+            ("Priya Patel", "10", "A", "2008-03-15"),
+            ("Rohit Kumar", "10", "B", "2008-07-10"),
+            ("Sneha Singh", "10", "B", "2008-01-25"),
+            ("Vikram Rao", "11", "A", "2007-11-05"),
+            ("Anita Desai", "11", "A", "2007-09-30"),
+            ("Kiran Reddy", "11", "B", "2007-12-18"),
+            ("Meera Joshi", "12", "A", "2006-08-22"),
+            ("Arjun Nair", "12", "A", "2006-04-14"),
+            ("Deepika Gupta", "12", "B", "2006-06-08")
+        ]
+        
+        # Sample subjects
+        sample_subjects = [
+            ("Mathematics",),
+            ("Physics",),
+            ("Chemistry",),
+            ("Biology",),
+            ("English",),
+            ("History",),
+            ("Geography",),
+            ("Computer Science",)
+        ]
+        
+        # Insert students
+        students_added = 0
+        for student in sample_students:
+            if execute_query("INSERT INTO Student (name, class, section, dob) VALUES (?, ?, ?, ?)", student):
+                students_added += 1
+        
+        # Insert subjects
+        subjects_added = 0
+        for subject in sample_subjects:
+            if execute_query("INSERT INTO Subject (subject_name) VALUES (?)", subject):
+                subjects_added += 1
+        
+        # Insert sample marks
+        marks_added = 0
+        for student_id in range(1, students_added + 1):
+            for subject_id in range(1, min(6, subjects_added + 1)):  # 5 subjects per student
+                marks_obtained = random.randint(45, 95)
+                assessment_date = date.today() - timedelta(days=random.randint(1, 30))
+                assessment_type = random.choice(['Quiz', 'Assignment', 'Midterm', 'Final'])
+                
+                if execute_query(
+                    "INSERT INTO Marks (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type) VALUES (?, ?, ?, ?, ?, ?)",
+                    (student_id, subject_id, marks_obtained, 100, assessment_date, assessment_type)
+                ):
+                    marks_added += 1
+        
+        print(f"Sample data inserted: {students_added} students, {subjects_added} subjects, {marks_added} marks")
+        return True
+        
+    except Exception as e:
+        print(f"Error inserting sample data: {e}")
+        return False
+
 def init_database():
-    """Initialize database with tables if they don't exist"""
+    """Initialize database with tables and sample data if they don't exist"""
     db = get_db_connection()
     if not db:
         return False
@@ -173,6 +247,9 @@ def init_database():
         for index_sql in indexes_sql:
             db.execute_query(index_sql)
 
+        # Insert sample data if tables are empty
+        initialize_sample_data()
+        
         return True
 
     except Exception as e:
@@ -207,3 +284,25 @@ def get_database_info():
     except Exception as e:
         st.error(f"Error getting database info: {e}")
         return {}
+
+# Debug function to check database contents
+def debug_database():
+    """Debug function to check database contents"""
+    try:
+        students = fetch_all("SELECT COUNT(*) FROM Student")
+        subjects = fetch_all("SELECT COUNT(*) FROM Subject") 
+        marks = fetch_all("SELECT COUNT(*) FROM Marks")
+        
+        print(f"Students: {students[0][0] if students else 0}")
+        print(f"Subjects: {subjects[0][0] if subjects else 0}")
+        print(f"Marks: {marks[0][0] if marks else 0}")
+        
+        # Show actual student data
+        all_students = fetch_all("SELECT * FROM Student LIMIT 5")
+        if all_students:
+            print("Sample students:", all_students)
+        else:
+            print("No students found in database")
+            
+    except Exception as e:
+        print(f"Debug error: {e}")
