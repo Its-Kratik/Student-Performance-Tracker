@@ -12,6 +12,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import custom modules
+from db.connection import get_db_connection, init_database
 if get_db_connection():
     init_database()
     st.success("Database initialized successfully!")
