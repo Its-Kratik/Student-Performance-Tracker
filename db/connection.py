@@ -167,10 +167,14 @@ def init_database():
         student_table_sql = """
         CREATE TABLE IF NOT EXISTS Student (
             student_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            class TEXT NOT NULL,
-            section TEXT NOT NULL,
-            dob DATE,
+            name TEXT NOT NULL 
+                CHECK(length(trim(name)) >= 2),
+            class TEXT NOT NULL 
+                CHECK(class IN ('10', '11', '12')),
+            section TEXT NOT NULL 
+                CHECK(section IN ('A', 'B', 'C')),
+            dob DATE 
+                CHECK(dob <= date('now')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -178,7 +182,8 @@ def init_database():
         subject_table_sql = """
         CREATE TABLE IF NOT EXISTS Subject (
             subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject_name TEXT NOT NULL UNIQUE,
+            subject_name TEXT NOT NULL UNIQUE
+                CHECK(length(trim(subject_name)) >= 2),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -186,23 +191,30 @@ def init_database():
         marks_table_sql = """
         CREATE TABLE IF NOT EXISTS Marks (
             mark_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER,
-            subject_id INTEGER,
-            marks_obtained INTEGER,
-            max_marks INTEGER DEFAULT 100,
-            assessment_date DATE,
-            assessment_type TEXT DEFAULT 'Assignment',
+            student_id INTEGER NOT NULL,
+            subject_id INTEGER NOT NULL,
+            marks_obtained INTEGER NOT NULL
+                CHECK(marks_obtained >= 0),
+            max_marks INTEGER DEFAULT 100
+                CHECK(max_marks > 0),
+            assessment_date DATE DEFAULT (date('now'))
+                CHECK(assessment_date <= date('now')),
+            assessment_type TEXT DEFAULT 'Assignment'
+                CHECK(assessment_type IN ('Quiz', 'Assignment', 'Midterm', 'Final', 'Project')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (student_id) REFERENCES Student(student_id) ON DELETE CASCADE,
             FOREIGN KEY (subject_id) REFERENCES Subject(subject_id) ON DELETE CASCADE,
-            CHECK (marks_obtained >= 0 AND marks_obtained <= max_marks)
+            CHECK(marks_obtained <= max_marks)
         )
         """
 
         indexes_sql = [
             "CREATE INDEX IF NOT EXISTS idx_student_class_section ON Student(class, section)",
-            "CREATE INDEX IF NOT EXISTS idx_marks_student_subject ON Marks(student_id, subject_id)",
-            "CREATE INDEX IF NOT EXISTS idx_marks_assessment_date ON Marks(assessment_date)"
+            "CREATE INDEX IF NOT EXISTS idx_student_name ON Student(name)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_student_id ON Marks(student_id)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_subject_id ON Marks(subject_id)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_assessment_date ON Marks(assessment_date)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_student_subject ON Marks(student_id, subject_id)"
         ]
 
         for table_sql in [student_table_sql, subject_table_sql, marks_table_sql]:
