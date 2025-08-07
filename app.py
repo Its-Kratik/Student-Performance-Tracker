@@ -73,7 +73,7 @@ def initialize_app():
     if 'db_initialized' not in st.session_state:
         with st.spinner("Initializing SQLite database..."):
             try:
-                if initialize_database():
+                if init_database():
                     st.session_state.db_initialized = True
                     st.success("✅ Database initialized successfully!")
                 else:
