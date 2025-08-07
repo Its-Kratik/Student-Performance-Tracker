@@ -1,139 +1,315 @@
 """
-Subject Model - CRUD operations for Subject entity (SQLite version)
+Marks Model - CRUD operations and calculations for Marks entity (SQLite version)
 """
 import streamlit as st
 import pandas as pd
+from datetime import date, datetime
+from typing import List, Dict, Optional
 from db.connection import execute_query, fetch_all, fetch_one
 
-class Subject:
-    def __init__(self, subject_id=None, subject_name=None):
+class Marks:
+    def __init__(self, mark_id=None, student_id=None, subject_id=None, 
+                 marks_obtained=None, max_marks=100, assessment_date=None, assessment_type="Assignment"):
+        self.mark_id = mark_id
+        self.student_id = student_id
         self.subject_id = subject_id
-        self.subject_name = subject_name
+        self.marks_obtained = marks_obtained
+        self.max_marks = max_marks
+        self.assessment_date = assessment_date
+        self.assessment_type = assessment_type
 
     @staticmethod
-    def add_subject(subject_name: str) -> bool:
-        """Add new subject to database"""
-        query = "INSERT INTO Subject (subject_name) VALUES (?)"
-        return execute_query(query, (subject_name,))
+    def add_marks(student_id: int, subject_id: int, marks_obtained: int, 
+                  max_marks: int = 100, assessment_date: date = None, 
+                  assessment_type: str = "Assignment") -> bool:
+        """Add new marks entry to database"""
+        if assessment_date is None:
+            assessment_date = date.today()
+
+        query = """
+        INSERT INTO Marks (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type) 
+        VALUES (?, ?, ?, ?, ?, ?)
+        """
+        return execute_query(query, (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type))
 
     @staticmethod
-    def get_all_subjects() -> list:
-        """Get all subjects from database"""
-        query = "SELECT subject_id, subject_name, created_at FROM Subject ORDER BY subject_name"
+    def get_all_marks() -> list:
+        """Get all marks with student and subject names"""
+        query = """
+        SELECT m.mark_id, s.name, sub.subject_name, m.marks_obtained, m.max_marks,
+               m.assessment_date, m.assessment_type, m.created_at,
+               m.student_id, m.subject_id
+        FROM Marks m
+        JOIN Student s ON m.student_id = s.student_id
+        JOIN Subject sub ON m.subject_id = sub.subject_id
+        ORDER BY m.assessment_date DESC, s.name, sub.subject_name
+        """
         return fetch_all(query)
 
     @staticmethod
-    def get_subject_by_id(subject_id: int) -> tuple:
-        """Get subject by ID"""
-        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_id = ?"
-        return fetch_one(query, (subject_id,))
-
-    @staticmethod
-    def get_subject_by_name(subject_name: str) -> tuple:
-        """Get subject by name"""
-        query = "SELECT subject_id, subject_name FROM Subject WHERE subject_name = ?"
-        return fetch_one(query, (subject_name,))
-
-    @staticmethod
-    def update_subject(subject_id: int, subject_name: str) -> bool:
-        """Update existing subject"""
-        query = "UPDATE Subject SET subject_name = ? WHERE subject_id = ?"
-        return execute_query(query, (subject_name, subject_id))
-
-    @staticmethod
-    def delete_subject(subject_id: int) -> bool:
-        """Delete subject and all associated marks"""
-        query = "DELETE FROM Subject WHERE subject_id = ?"
-        return execute_query(query, (subject_id,))
-
-    @staticmethod
-    def search_subjects(search_term: str = "") -> list:
-        """Search subjects by name"""
+    def get_student_marks(student_id: int) -> list:
+        """Get all marks for a specific student"""
         query = """
-        SELECT subject_id, subject_name, created_at 
-        FROM Subject 
-        WHERE subject_name LIKE ? OR ? = ''
-        ORDER BY subject_name
+        SELECT m.mark_id, sub.subject_name, m.marks_obtained, m.max_marks,
+               m.assessment_date, m.assessment_type, s.name,
+               m.student_id, m.subject_id
+        FROM Marks m
+        JOIN Subject sub ON m.subject_id = sub.subject_id
+        JOIN Student s ON m.student_id = s.student_id
+        WHERE m.student_id = ?
+        ORDER BY sub.subject_name, m.assessment_date DESC
         """
-        search_pattern = f"%{search_term}%"
-        return fetch_all(query, (search_pattern, search_term))
+        return fetch_all(query, (student_id,))
 
     @staticmethod
-    def get_subjects_dataframe() -> pd.DataFrame:
-        """Get subjects as pandas DataFrame"""
-        subjects = Subject.get_all_subjects()
-        if subjects:
-            df = pd.DataFrame(subjects, columns=['ID', 'Subject Name', 'Created'])
-            df['Created'] = pd.to_datetime(df['Created']).dt.date
-            return df
-        return pd.DataFrame()
+    def get_subject_marks(subject_id: int) -> list:
+        """Get all marks for a specific subject"""
+        query = """
+        SELECT m.mark_id, s.name, m.marks_obtained, m.max_marks,
+               m.assessment_date, m.assessment_type, sub.subject_name,
+               m.student_id, m.subject_id
+        FROM Marks m
+        JOIN Student s ON m.student_id = s.student_id
+        JOIN Subject sub ON m.subject_id = sub.subject_id
+        WHERE m.subject_id = ?
+        ORDER BY s.name, m.assessment_date DESC
+        """
+        return fetch_all(query, (subject_id,))
 
     @staticmethod
-    def validate_subject_data(subject_name: str) -> tuple:
-        """Validate subject data before insertion/update"""
+    def update_marks(mark_id: int, marks_obtained: int, max_marks: int = 100, 
+                    assessment_date: date = None, assessment_type: str = "Assignment") -> bool:
+        """Update existing marks entry"""
+        if assessment_date is None:
+            assessment_date = date.today()
+
+        query = """
+        UPDATE Marks 
+        SET marks_obtained = ?, max_marks = ?, assessment_date = ?, assessment_type = ? 
+        WHERE mark_id = ?
+        """
+        return execute_query(query, (marks_obtained, max_marks, assessment_date, assessment_type, mark_id))
+
+    @staticmethod
+    def delete_marks(mark_id: int) -> bool:
+        """Delete marks entry"""
+        query = "DELETE FROM Marks WHERE mark_id = ?"
+        return execute_query(query, (mark_id,))
+
+    @staticmethod
+    def calculate_grade(percentage: float) -> str:
+        """Calculate letter grade based on percentage"""
+        if percentage >= 90:
+            return "A+"
+        elif percentage >= 80:
+            return "A"
+        elif percentage >= 70:
+            return "B+"
+        elif percentage >= 60:
+            return "B"
+        elif percentage >= 50:
+            return "C+"
+        elif percentage >= 40:
+            return "C"
+        else:
+            return "F"
+
+    @staticmethod
+    def calculate_percentage(marks_obtained: int, max_marks: int) -> float:
+        """Calculate percentage from marks"""
+        if max_marks == 0:
+            return 0.0
+        return round((marks_obtained / max_marks) * 100, 2)
+
+    @staticmethod
+    def get_student_summary(student_id: int) -> dict:
+        """Get comprehensive summary for a student"""
+        marks_data = Marks.get_student_marks(student_id)
+
+        if not marks_data:
+            return {
+                'student_name': '',
+                'total_subjects': 0,
+                'total_marks_obtained': 0,
+                'total_max_marks': 0,
+                'overall_percentage': 0.0,
+                'overall_grade': 'N/A',
+                'subject_details': [],
+                'pass_fail_status': 'No Data'
+            }
+
+        student_name = marks_data[0][6]  # Student name from query
+        total_obtained = sum(mark[2] for mark in marks_data)  # marks_obtained
+        total_max = sum(mark[3] for mark in marks_data)  # max_marks
+
+        overall_percentage = Marks.calculate_percentage(total_obtained, total_max)
+        overall_grade = Marks.calculate_grade(overall_percentage)
+
+        # Subject-wise details
+        subject_details = []
+        for mark in marks_data:
+            subject_name = mark[1]
+            marks_obtained = mark[2]
+            max_marks = mark[3]
+            percentage = Marks.calculate_percentage(marks_obtained, max_marks)
+            grade = Marks.calculate_grade(percentage)
+
+            subject_details.append({
+                'subject': subject_name,
+                'marks_obtained': marks_obtained,
+                'max_marks': max_marks,
+                'percentage': percentage,
+                'grade': grade,
+                'assessment_date': mark[4],
+                'assessment_type': mark[5]
+            })
+
+        # Determine pass/fail status (assuming 40% is pass threshold)
+        pass_fail_status = "Pass" if overall_percentage >= 40 else "Fail"
+
+        return {
+            'student_name': student_name,
+            'total_subjects': len(marks_data),
+            'total_marks_obtained': total_obtained,
+            'total_max_marks': total_max,
+            'overall_percentage': overall_percentage,
+            'overall_grade': overall_grade,
+            'subject_details': subject_details,
+            'pass_fail_status': pass_fail_status
+        }
+
+    @staticmethod
+    def get_class_analytics(class_name: str, section: str = None) -> dict:
+        """Get analytics for a class/section"""
+        # Build query based on whether section is provided
+        if section:
+            student_condition = "s.class = ? AND s.section = ?"
+            params = (class_name, section)
+        else:
+            student_condition = "s.class = ?"
+            params = (class_name,)
+
+        query = f"""
+        SELECT s.student_id, s.name, s.class, s.section,
+               SUM(m.marks_obtained) as total_obtained,
+               SUM(m.max_marks) as total_max,
+               COUNT(m.mark_id) as total_subjects
+        FROM Student s
+        LEFT JOIN Marks m ON s.student_id = m.student_id
+        WHERE {student_condition}
+        GROUP BY s.student_id, s.name, s.class, s.section
+        HAVING total_subjects > 0
+        ORDER BY total_obtained DESC
+        """
+
+        results = fetch_all(query, params)
+
+        if not results:
+            return {
+                'class_name': class_name,
+                'section': section,
+                'total_students': 0,
+                'students_with_marks': 0,
+                'class_average': 0.0,
+                'pass_count': 0,
+                'fail_count': 0,
+                'pass_percentage': 0.0,
+                'top_performers': [],
+                'student_summaries': []
+            }
+
+        # Calculate statistics
+        student_summaries = []
+        total_percentage_sum = 0
+        pass_count = 0
+
+        for result in results:
+            percentage = Marks.calculate_percentage(result[4], result[5])
+            grade = Marks.calculate_grade(percentage)
+
+            student_summaries.append({
+                'student_id': result[0],
+                'name': result[1],
+                'total_obtained': result[4],
+                'total_max': result[5],
+                'percentage': percentage,
+                'grade': grade,
+                'subjects_count': result[6]
+            })
+
+            total_percentage_sum += percentage
+            if percentage >= 40:  # Pass threshold
+                pass_count += 1
+
+        students_with_marks = len(student_summaries)
+        class_average = total_percentage_sum / students_with_marks if students_with_marks > 0 else 0
+        fail_count = students_with_marks - pass_count
+        pass_percentage = (pass_count / students_with_marks * 100) if students_with_marks > 0 else 0
+
+        # Top 3 performers
+        top_performers = sorted(student_summaries, key=lambda x: x['percentage'], reverse=True)[:3]
+
+        return {
+            'class_name': class_name,
+            'section': section,
+            'total_students': students_with_marks,
+            'students_with_marks': students_with_marks,
+            'class_average': round(class_average, 2),
+            'pass_count': pass_count,
+            'fail_count': fail_count,
+            'pass_percentage': round(pass_percentage, 2),
+            'top_performers': top_performers,
+            'student_summaries': student_summaries
+        }
+
+    @staticmethod
+    def validate_marks_data(marks_obtained: int, max_marks: int, assessment_date: date = None) -> tuple:
+        """Validate marks data before insertion/update"""
         errors = []
 
-        # Subject name validation
-        if not subject_name or len(subject_name.strip()) < 2:
-            errors.append("Subject name must be at least 2 characters long")
-        elif len(subject_name) > 50:
-            errors.append("Subject name cannot exceed 50 characters")
+        # Marks validation
+        if marks_obtained < 0:
+            errors.append("Marks obtained cannot be negative")
+        elif marks_obtained > max_marks:
+            errors.append("Marks obtained cannot exceed maximum marks")
 
-        # Check for duplicate subject name (case-insensitive)
-        existing_subject = Subject.get_subject_by_name(subject_name.strip())
-        if existing_subject:
-            errors.append("Subject already exists")
+        # Max marks validation
+        if max_marks <= 0:
+            errors.append("Maximum marks must be greater than 0")
+        elif max_marks > 1000:  # Reasonable upper limit
+            errors.append("Maximum marks seems too high (limit: 1000)")
+
+        # Date validation
+        if assessment_date and assessment_date > date.today():
+            errors.append("Assessment date cannot be in the future")
 
         return len(errors) == 0, errors
 
-    @staticmethod
-    def get_subject_statistics() -> dict:
-        """Get statistics about subjects"""
-        stats = {}
-
-        # Total subjects
-        total_query = "SELECT COUNT(*) FROM Subject"
-        result = fetch_one(total_query)
-        stats['total_subjects'] = result[0] if result else 0
-
-        # Subjects with marks
-        with_marks_query = """
-        SELECT COUNT(DISTINCT s.subject_id) 
-        FROM Subject s 
-        JOIN Marks m ON s.subject_id = m.subject_id
-        """
-        result = fetch_one(with_marks_query)
-        stats['subjects_with_marks'] = result[0] if result else 0
-
-        # Most popular subject (by number of marks entries)
-        popular_query = """
-        SELECT s.subject_name, COUNT(m.mark_id) as mark_count
-        FROM Subject s 
-        LEFT JOIN Marks m ON s.subject_id = m.subject_id
-        GROUP BY s.subject_id, s.subject_name
-        ORDER BY mark_count DESC
-        LIMIT 1
-        """
-        result = fetch_one(popular_query)
-        if result and result[1] > 0:
-            stats['most_popular_subject'] = result[0]
-            stats['most_popular_count'] = result[1]
-        else:
-            stats['most_popular_subject'] = "N/A"
-            stats['most_popular_count'] = 0
-
-        return stats
-
-def display_subjects_table(subjects_data: list, show_actions: bool = True) -> None:
-    """Display subjects in a formatted table"""
-    if not subjects_data:
-        st.info("No subjects found")
+def display_marks_table(marks_data: list, show_calculations: bool = True) -> None:
+    """Display marks in a formatted table with calculations"""
+    if not marks_data:
+        st.info("No marks found")
         return
 
-    df = pd.DataFrame(subjects_data, columns=['ID', 'Subject Name', 'Created'])
+    # Prepare data for display
+    display_data = []
+    for mark in marks_data:
+        percentage = Marks.calculate_percentage(mark[3], mark[4])
+        grade = Marks.calculate_grade(percentage)
 
-    # Format dates
-    df['Created'] = pd.to_datetime(df['Created']).dt.strftime('%Y-%m-%d')
+        display_data.append([
+            mark[1],  # Student/Subject name
+            mark[2] if len(mark) > 8 else mark[1],  # Subject/Student name
+            f"{mark[3]}/{mark[4]}",  # Marks
+            f"{percentage}%",  # Percentage
+            grade,  # Grade
+            mark[5].strftime('%Y-%m-%d') if isinstance(mark[5], date) else mark[5],  # Date
+            mark[6]  # Assessment type
+        ])
+
+    df = pd.DataFrame(display_data, columns=[
+        'Student', 'Subject', 'Marks', 'Percentage', 'Grade', 'Date', 'Type'
+    ])
 
     # Display table
     st.dataframe(
@@ -141,100 +317,14 @@ def display_subjects_table(subjects_data: list, show_actions: bool = True) -> No
         use_container_width=True,
         hide_index=True,
         column_config={
-            "ID": st.column_config.NumberColumn("Subject ID", width="small"),
-            "Subject Name": st.column_config.TextColumn("Subject", width="medium"),
-            "Created": st.column_config.DateColumn("Created On", width="medium")
+            "Student": st.column_config.TextColumn("Student", width="medium"),
+            "Subject": st.column_config.TextColumn("Subject", width="medium"),
+            "Marks": st.column_config.TextColumn("Marks", width="small"),
+            "Percentage": st.column_config.TextColumn("Percentage", width="small"),
+            "Grade": st.column_config.TextColumn("Grade", width="small"),
+            "Date": st.column_config.TextColumn("Date", width="medium"),
+            "Type": st.column_config.TextColumn("Type", width="small")
         }
     )
 
-    st.info(f"Total subjects: {len(subjects_data)}")
-
-def subject_form(subject_data=None, form_type="Add"):
-    """Reusable subject form for add/edit operations"""
-
-    # Initialize default values
-    default_name = subject_data[1] if subject_data else ""
-
-    with st.form(f"subject_{form_type.lower()}_form"):
-        subject_name = st.text_input(
-            "Subject Name *", 
-            value=default_name, 
-            max_chars=50,
-            help="Enter the name of the subject (e.g., Mathematics, Physics, etc.)"
-        )
-
-        submitted = st.form_submit_button(f"{form_type} Subject", type="primary")
-
-        if submitted:
-            # Validate input
-            if form_type == "Update" and subject_data:
-                # For updates, check duplicates excluding current subject
-                errors = []
-                if not subject_name or len(subject_name.strip()) < 2:
-                    errors.append("Subject name must be at least 2 characters long")
-                elif len(subject_name) > 50:
-                    errors.append("Subject name cannot exceed 50 characters")
-                else:
-                    # Check for duplicate (excluding current subject)
-                    existing_subject = Subject.get_subject_by_name(subject_name.strip())
-                    if existing_subject and existing_subject[0] != subject_data[0]:
-                        errors.append("Subject already exists")
-
-                is_valid = len(errors) == 0
-            else:
-                is_valid, errors = Subject.validate_subject_data(subject_name)
-
-            if is_valid:
-                if form_type == "Add":
-                    success = Subject.add_subject(subject_name.strip())
-                    if success:
-                        st.success(f"✅ Subject '{subject_name}' added successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to add subject")
-
-                elif form_type == "Update" and subject_data:
-                    success = Subject.update_subject(subject_data[0], subject_name.strip())
-                    if success:
-                        st.success(f"✅ Subject '{subject_name}' updated successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to update subject")
-            else:
-                for error in errors:
-                    st.error(f"❌ {error}")
-
-def subject_selector() -> tuple:
-    """Subject selector widget for forms"""
-    subjects = Subject.get_all_subjects()
-    if not subjects:
-        st.warning("No subjects found. Please add subjects first.")
-        return None, None
-
-    subject_options = {f"{subj[1]}": subj[0] for subj in subjects}
-    selected_name = st.selectbox(
-        "Select Subject *", 
-        options=list(subject_options.keys()),
-        help="Choose a subject from the available options"
-    )
-
-    return subject_options.get(selected_name), selected_name
-
-def display_subject_statistics():
-    """Display subject-related statistics"""
-    stats = Subject.get_subject_statistics()
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Total Subjects", stats['total_subjects'])
-
-    with col2:
-        st.metric("Subjects with Marks", stats['subjects_with_marks'])
-
-    with col3:
-        st.metric(
-            "Most Popular Subject", 
-            stats['most_popular_subject'],
-            f"{stats['most_popular_count']} marks"
-        )
+    st.info(f"Total records: {len(marks_data)}")
