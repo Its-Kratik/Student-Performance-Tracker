@@ -8,7 +8,7 @@ import os
 from datetime import date
 import sqlite3
 
-@st.cache_data
+
 def get_filtered_students(selected_class, selected_section):
     students = Student.get_all_students()
     if selected_class == "All":
