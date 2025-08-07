@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 from db.connection import execute_query, fetch_all, fetch_one
 
 class Marks:
-    def __init__(self, mark_id=None, student_id=None, subject_id=None, 
+    def __init__(self, mark_id=None, student_id=None, subject_id=None,
                  marks_obtained=None, max_marks=100, assessment_date=None, assessment_type="Assignment"):
         self.mark_id = mark_id
         self.student_id = student_id
@@ -19,15 +19,15 @@ class Marks:
         self.assessment_type = assessment_type
 
     @staticmethod
-    def add_marks(student_id: int, subject_id: int, marks_obtained: int, 
-                  max_marks: int = 100, assessment_date: date = None, 
+    def add_marks(student_id: int, subject_id: int, marks_obtained: int,
+                  max_marks: int = 100, assessment_date: date = None,
                   assessment_type: str = "Assignment") -> bool:
         """Add new marks entry to database"""
         if assessment_date is None:
             assessment_date = date.today()
-
+        
         query = """
-        INSERT INTO Marks (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type) 
+        INSERT INTO Marks (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type)
         VALUES (?, ?, ?, ?, ?, ?)
         """
         return execute_query(query, (student_id, subject_id, marks_obtained, max_marks, assessment_date, assessment_type))
@@ -77,15 +77,15 @@ class Marks:
         return fetch_all(query, (subject_id,))
 
     @staticmethod
-    def update_marks(mark_id: int, marks_obtained: int, max_marks: int = 100, 
-                    assessment_date: date = None, assessment_type: str = "Assignment") -> bool:
+    def update_marks(mark_id: int, marks_obtained: int, max_marks: int = 100,
+                     assessment_date: date = None, assessment_type: str = "Assignment") -> bool:
         """Update existing marks entry"""
         if assessment_date is None:
             assessment_date = date.today()
-
+        
         query = """
-        UPDATE Marks 
-        SET marks_obtained = ?, max_marks = ?, assessment_date = ?, assessment_type = ? 
+        UPDATE Marks
+        SET marks_obtained = ?, max_marks = ?, assessment_date = ?, assessment_type = ?
         WHERE mark_id = ?
         """
         return execute_query(query, (marks_obtained, max_marks, assessment_date, assessment_type, mark_id))
@@ -125,7 +125,7 @@ class Marks:
     def get_student_summary(student_id: int) -> dict:
         """Get comprehensive summary for a student"""
         marks_data = Marks.get_student_marks(student_id)
-
+        
         if not marks_data:
             return {
                 'student_name': '',
@@ -141,7 +141,6 @@ class Marks:
         student_name = marks_data[0][6]  # Student name from query
         total_obtained = sum(mark[2] for mark in marks_data)  # marks_obtained
         total_max = sum(mark[3] for mark in marks_data)  # max_marks
-
         overall_percentage = Marks.calculate_percentage(total_obtained, total_max)
         overall_grade = Marks.calculate_grade(overall_percentage)
 
@@ -153,7 +152,7 @@ class Marks:
             max_marks = mark[3]
             percentage = Marks.calculate_percentage(marks_obtained, max_marks)
             grade = Marks.calculate_grade(percentage)
-
+            
             subject_details.append({
                 'subject': subject_name,
                 'marks_obtained': marks_obtained,
@@ -222,11 +221,11 @@ class Marks:
         student_summaries = []
         total_percentage_sum = 0
         pass_count = 0
-
+        
         for result in results:
             percentage = Marks.calculate_percentage(result[4], result[5])
             grade = Marks.calculate_grade(percentage)
-
+            
             student_summaries.append({
                 'student_id': result[0],
                 'name': result[1],
@@ -236,7 +235,7 @@ class Marks:
                 'grade': grade,
                 'subjects_count': result[6]
             })
-
+            
             total_percentage_sum += percentage
             if percentage >= 40:  # Pass threshold
                 pass_count += 1
@@ -285,6 +284,7 @@ class Marks:
 
         return len(errors) == 0, errors
 
+
 def display_marks_table(marks_data: list, show_calculations: bool = True) -> None:
     """Display marks in a formatted table with calculations"""
     if not marks_data:
@@ -296,7 +296,7 @@ def display_marks_table(marks_data: list, show_calculations: bool = True) -> Non
     for mark in marks_data:
         percentage = Marks.calculate_percentage(mark[3], mark[4])
         grade = Marks.calculate_grade(percentage)
-
+        
         display_data.append([
             mark[1],  # Student/Subject name
             mark[2] if len(mark) > 8 else mark[1],  # Subject/Student name
