@@ -1,5 +1,5 @@
 """
-Settings Page - Application configuration and preferences
+Settings Page - Application configuration and preferences (SQLite version)
 """
 import streamlit as st
 import pandas as pd
@@ -10,7 +10,8 @@ import os
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.db_init import initialize_database, create_sqlite_tables
+# ✅ Correct SQLite imports
+from db.connection import get_db_connection, init_database, get_database_info, initialize_sample_data
 from models.student import Student
 from models.subject import Subject
 from models.marks import Marks
@@ -48,24 +49,33 @@ if settings_category == "Database Management":
 
     try:
         # Test database connection
+        db_info = get_database_info()
         test_students = Student.get_all_students()
-        st.success("✅ Database connection is working")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.success("✅ Database connection is working")
+            st.info(f"**Database:** SQLite")
+            st.info(f"**Location:** {db_info.get('database_path', 'Unknown')}")
+            
+        with col2:
+            db_size_mb = db_info.get('database_size', 0) / (1024 * 1024) if db_info.get('database_size', 0) > 0 else 0
+            st.metric("Database Size", f"{db_size_mb:.2f} MB")
 
         # Display basic statistics
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            student_count = len(test_students) if test_students else 0
+            student_count = db_info.get('student_count', 0)
             st.metric("Total Students", student_count)
 
         with col2:
-            subjects = Subject.get_all_subjects()
-            subject_count = len(subjects) if subjects else 0
+            subject_count = db_info.get('subject_count', 0)
             st.metric("Total Subjects", subject_count)
 
         with col3:
-            marks = Marks.get_all_marks()
-            marks_count = len(marks) if marks else 0
+            marks_count = db_info.get('marks_count', 0)
             st.metric("Total Marks", marks_count)
 
     except Exception as e:
@@ -85,7 +95,7 @@ if settings_category == "Database Management":
         if st.button("🔄 Reinitialize Database"):
             with st.spinner("Reinitializing database..."):
                 try:
-                    if initialize_database():
+                    if init_database():
                         st.success("✅ Database reinitialized successfully!")
                         st.balloons()
                         st.rerun()
@@ -95,16 +105,17 @@ if settings_category == "Database Management":
                     st.error(f"❌ Error: {str(e)}")
 
     with col2:
-        st.markdown("#### Create SQLite Fallback")
-        st.info("Create SQLite backup if MySQL is unavailable")
+        st.markdown("#### Add Sample Data")
+        st.info("Add sample students, subjects, and marks if database is empty")
 
-        if st.button("💾 Create SQLite Backup"):
-            with st.spinner("Creating SQLite backup..."):
+        if st.button("📝 Add Sample Data"):
+            with st.spinner("Adding sample data..."):
                 try:
-                    if create_sqlite_tables():
-                        st.success("✅ SQLite backup created successfully!")
+                    if initialize_sample_data():
+                        st.success("✅ Sample data added successfully!")
+                        st.rerun()
                     else:
-                        st.error("❌ Failed to create SQLite backup")
+                        st.error("❌ Failed to add sample data")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
 
@@ -119,22 +130,47 @@ if settings_category == "Database Management":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("🗑️ Delete All Marks", type="secondary"):
-                if st.checkbox("I confirm deletion of all marks"):
-                    # Implementation would go here
-                    st.warning("Feature disabled for safety")
+            if st.button("🗑️ Clear All Marks", type="secondary"):
+                if st.checkbox("I confirm deletion of all marks", key="clear_marks"):
+                    try:
+                        from db.connection import execute_query
+                        if execute_query("DELETE FROM Marks"):
+                            st.success("✅ All marks deleted")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete marks")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
         with col2:
-            if st.button("🗑️ Delete All Students", type="secondary"):
-                if st.checkbox("I confirm deletion of all students"):
-                    # Implementation would go here
-                    st.warning("Feature disabled for safety")
+            if st.button("🗑️ Clear All Students", type="secondary"):
+                if st.checkbox("I confirm deletion of all students", key="clear_students"):
+                    try:
+                        from db.connection import execute_query
+                        # Delete in order due to foreign key constraints
+                        execute_query("DELETE FROM Marks")
+                        if execute_query("DELETE FROM Student"):
+                            st.success("✅ All students deleted")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete students")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
         with col3:
-            if st.button("🗑️ Delete All Subjects", type="secondary"):
-                if st.checkbox("I confirm deletion of all subjects"):
-                    # Implementation would go here
-                    st.warning("Feature disabled for safety")
+            if st.button("🗑️ Clear All Subjects", type="secondary"):
+                if st.checkbox("I confirm deletion of all subjects", key="clear_subjects"):
+                    try:
+                        from db.connection import execute_query
+                        # Delete in order due to foreign key constraints
+                        execute_query("DELETE FROM Marks")
+                        if execute_query("DELETE FROM Subject"):
+                            st.success("✅ All subjects deleted")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete subjects")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
 elif settings_category == "Data Import/Export":
     st.subheader("📤📥 Data Import/Export")
@@ -288,9 +324,9 @@ elif settings_category == "System Information":
 
         app_info = {
             "Application": "Student Performance Tracker",
-            "Version": "1.0.0",
+            "Version": "2.0.0 (SQLite)",
             "Framework": "Streamlit",
-            "Database": "MySQL/SQLite",
+            "Database": "SQLite",
             "Python Version": "3.x",
             "Last Updated": "2024"
         }
@@ -302,16 +338,14 @@ elif settings_category == "System Information":
         st.markdown("### 📊 Database Statistics")
 
         try:
-            students = Student.get_all_students()
-            subjects = Subject.get_all_subjects()
-            marks = Marks.get_all_marks()
+            db_info = get_database_info()
 
             db_stats = {
-                "Total Students": len(students) if students else 0,
-                "Total Subjects": len(subjects) if subjects else 0,
-                "Total Assessments": len(marks) if marks else 0,
-                "Database Size": "Unknown",
-                "Last Backup": "Not Set"
+                "Total Students": db_info.get('student_count', 0),
+                "Total Subjects": db_info.get('subject_count', 0),
+                "Total Assessments": db_info.get('marks_count', 0),
+                "Database Size": f"{db_info.get('database_size', 0) / 1024:.1f} KB",
+                "Database Exists": "Yes" if db_info.get('database_exists', False) else "No"
             }
 
             for key, value in db_stats.items():
@@ -329,7 +363,7 @@ elif settings_category == "System Information":
         "Python": "3.8 or higher",
         "RAM": "512MB minimum, 1GB recommended",
         "Storage": "100MB for application, additional for data",
-        "Database": "MySQL 8.0+ or SQLite 3.x",
+        "Database": "SQLite 3.x (built-in)",
         "Browser": "Modern web browser (Chrome, Firefox, Safari, Edge)"
     }
 
@@ -348,13 +382,14 @@ elif settings_category == "System Information":
         "✅ Individual Student Report Cards",
         "✅ Class Performance Analytics",
         "✅ Interactive Visual Reports",
-        "✅ PDF and CSV Export capabilities",
+        "✅ CSV Export capabilities",
         "✅ Search and Filter functionality",
-        "✅ Pagination for large datasets",
+        "✅ SQLite Database Management",
         "✅ Responsive design",
+        "✅ Sample Data Generation",
         "🔄 Data Import (Coming Soon)",
         "🔄 Advanced Analytics (Coming Soon)",
-        "🔄 Email Reports (Coming Soon)"
+        "🔄 PDF Export (Coming Soon)"
     ]
 
     for feature in features:
@@ -473,7 +508,7 @@ elif settings_category == "Backup & Restore":
 
         backup_format = st.radio(
             "Backup Format:",
-            options=["CSV Archive", "JSON Export", "Database Dump"],
+            options=["CSV Archive", "Database Copy"],
             help="Choose the format for your backup"
         )
 
@@ -492,15 +527,44 @@ elif settings_category == "Backup & Restore":
                     marks = Marks.get_all_marks()
 
                     if backup_format == "CSV Archive":
-                        # Create CSV files for each data type
-                        st.info("CSV backup creation coming soon!")
+                        # Create combined CSV export
+                        import zipfile
+                        import io
+                        
+                        # Create in-memory ZIP file
+                        zip_buffer = io.BytesIO()
+                        
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            # Add students CSV
+                            if students:
+                                students_df = pd.DataFrame(students, columns=['ID', 'Name', 'Class', 'Section', 'DOB', 'Created'])
+                                zip_file.writestr("students.csv", students_df.to_csv(index=False))
+                            
+                            # Add subjects CSV
+                            if subjects:
+                                subjects_df = pd.DataFrame(subjects, columns=['ID', 'Subject Name', 'Created'])
+                                zip_file.writestr("subjects.csv", subjects_df.to_csv(index=False))
+                            
+                            # Add marks CSV
+                            if marks:
+                                marks_df = pd.DataFrame(marks, columns=[
+                                    'Mark ID', 'Student', 'Subject', 'Marks Obtained', 
+                                    'Max Marks', 'Assessment Date', 'Assessment Type', 
+                                    'Created', 'Student ID', 'Subject ID'
+                                ])
+                                zip_file.writestr("marks.csv", marks_df.to_csv(index=False))
 
-                    elif backup_format == "JSON Export":
-                        # Create JSON export
-                        st.info("JSON backup creation coming soon!")
+                        zip_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="📥 Download Backup Archive",
+                            data=zip_buffer.read(),
+                            file_name=f"student_tracker_backup_{date.today().strftime('%Y%m%d')}.zip",
+                            mime="application/zip"
+                        )
 
-                    else:  # Database Dump
-                        st.info("Database dump coming soon!")
+                    else:  # Database Copy
+                        st.info("Database copy backup coming soon!")
 
                 except Exception as e:
                     st.error(f"Backup creation failed: {str(e)}")
@@ -512,7 +576,7 @@ elif settings_category == "Backup & Restore":
 
         uploaded_backup = st.file_uploader(
             "Choose backup file",
-            type=['zip', 'json', 'sql'],
+            type=['zip', 'db'],
             help="Select your backup file"
         )
 
@@ -535,42 +599,6 @@ elif settings_category == "Backup & Restore":
                     st.warning("Restore functionality coming soon!")
                 else:
                     st.info("Please confirm overwrite to proceed")
-
-    st.markdown("---")
-
-    # Automated backup settings
-    st.markdown("### ⚙️ Automated Backup Settings")
-
-    auto_backup = st.checkbox(
-        "Enable Automated Backups",
-        help="Automatically create backups at specified intervals"
-    )
-
-    if auto_backup:
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            backup_frequency = st.selectbox(
-                "Backup Frequency",
-                options=["Daily", "Weekly", "Monthly"]
-            )
-
-        with col2:
-            backup_time = st.time_input(
-                "Backup Time",
-                value=None
-            )
-
-        with col3:
-            max_backups = st.number_input(
-                "Max Backups to Keep",
-                min_value=1,
-                max_value=30,
-                value=7
-            )
-
-        if st.button("💾 Save Backup Settings"):
-            st.success("✅ Automated backup settings saved!")
 
 # Footer with support information
 st.markdown("---")
