@@ -137,7 +137,7 @@ def initialize_sample_data():
             execute_query("INSERT INTO Student (name, class, section, dob) VALUES (?, ?, ?, ?)", student)
 
         for subject in sample_subjects:
-            execute_query("INSERT INTO Subject (subject_name) VALUES (?)", subject)
+            execute_query("INSERT OR IGNORE INTO Subject (subject_name) VALUES (?)", subject)
 
         for student_id in range(1, len(sample_students) + 1):
             for subject_id in range(1, 6):  # 5 subjects per student
@@ -196,8 +196,7 @@ def init_database():
                 CHECK(marks_obtained >= 0),
             max_marks INTEGER DEFAULT 100
                 CHECK(max_marks > 0),
-            assessment_date DATE DEFAULT (date('now'))
-                CHECK(assessment_date <= date('now')),
+            assessment_date DATE DEFAULT (date('now')),
             assessment_type TEXT DEFAULT 'Assignment'
                 CHECK(assessment_type IN ('Quiz', 'Assignment', 'Midterm', 'Final', 'Project')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
