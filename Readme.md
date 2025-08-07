@@ -1,10 +1,4 @@
 # 🎓 Student Performance Tracker
-
-[
-[
-[
-[
-
 > **A comprehensive web-based application for tracking and analyzing student academic performance with interactive dashboards, detailed analytics, and automated reporting capabilities.**
 
 ## 🚀 Live Demo
