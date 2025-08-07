@@ -173,8 +173,7 @@ def init_database():
                 CHECK(class IN ('10', '11', '12')),
             section TEXT NOT NULL 
                 CHECK(section IN ('A', 'B', 'C')),
-            dob DATE 
-                CHECK(dob <= date('now')),
+            dob DATE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """
