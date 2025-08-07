@@ -12,10 +12,18 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import custom modules
+# In app.py - Use this import
 from db.connection import get_db_connection, init_database
-if get_db_connection():
-    init_database()
-    st.success("Database initialized successfully!")
+
+# Initialize database
+try:
+    if get_db_connection():
+        if init_database():
+            st.success("✅ Database ready!")
+        else:
+            st.error("❌ Database initialization failed")
+except Exception as e:
+    st.error(f"Database error: {e}")
 from db.connection import get_database_info
 from models.student import Student
 from models.subject import Subject
