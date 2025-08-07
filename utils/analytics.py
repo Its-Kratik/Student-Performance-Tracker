@@ -1,10 +1,10 @@
 """
-Analytics utilities for performance calculations and insights
+Analytics utilities for performance calculations and insights (SQLite version)
 """
 import pandas as pd
 import streamlit as st
 from typing import Dict, List, Tuple
-from db.mysql_connection import fetch_all, fetch_one
+from db.connection import fetch_all, fetch_one  # ✅ Correct SQLite import
 from models.marks import Marks
 
 class PerformanceAnalytics:
@@ -18,11 +18,11 @@ class PerformanceAnalytics:
         params = []
 
         if class_name:
-            conditions.append("s.class = %s")
+            conditions.append("s.class = ?")  # ✅ SQLite placeholder
             params.append(class_name)
 
         if section:
-            conditions.append("s.section = %s")
+            conditions.append("s.section = ?")  # ✅ SQLite placeholder
             params.append(section)
 
         where_clause = " AND ".join(conditions)
@@ -143,7 +143,7 @@ class PerformanceAnalytics:
         params = []
 
         if class_name:
-            conditions.append("s.class = %s")
+            conditions.append("s.class = ?")  # ✅ SQLite placeholder
             params.append(class_name)
 
         where_clause = " AND ".join(conditions)
@@ -162,7 +162,7 @@ class PerformanceAnalytics:
         GROUP BY s.student_id, s.name, s.class, s.section
         HAVING total_max > 0
         ORDER BY percentage DESC
-        LIMIT %s
+        LIMIT ?
         """
 
         params.append(limit)
@@ -198,7 +198,7 @@ class PerformanceAnalytics:
         FROM Student s
         JOIN Marks m ON s.student_id = m.student_id
         GROUP BY s.student_id, s.name, s.class, s.section
-        HAVING percentage < %s
+        HAVING percentage < ?
         ORDER BY percentage ASC
         """
 
@@ -229,7 +229,7 @@ class PerformanceAnalytics:
                (m.marks_obtained * 100.0) / m.max_marks as percentage
         FROM Marks m
         JOIN Subject sub ON m.subject_id = sub.subject_id
-        WHERE m.student_id = %s
+        WHERE m.student_id = ?
         ORDER BY m.assessment_date DESC
         """
 
