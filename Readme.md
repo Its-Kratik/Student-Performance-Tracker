@@ -413,12 +413,9 @@ If you find this project helpful, please consider:
 
 **Built with ❤️ by [Kratik Jain](https://github.com/Its-Kratik)**
 
-[
-
 *Making education data-driven, one student at a time* 📚✨
 
 </div>
-<div style="text-align: center">⁂</div>
 
 [^1]: https://github.com/Its-Kratik
 
