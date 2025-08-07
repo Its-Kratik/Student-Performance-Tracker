@@ -9,7 +9,7 @@ import sys
 import os
 
 # Add the current directory to Python path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import custom modules
 from db.db_init import initialize_database
