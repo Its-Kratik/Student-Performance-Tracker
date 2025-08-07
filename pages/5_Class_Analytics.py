@@ -5,6 +5,19 @@ import streamlit as st
 import pandas as pd
 import sys
 import os
+from datetime import date
+import sqlite3
+
+@st.cache_data
+def get_filtered_students(selected_class, selected_section):
+    students = Student.get_all_students()
+    if selected_class == "All":
+        return students
+    
+    filtered = [s for s in students if s[2] == selected_class]
+    if selected_section != "All":
+        filtered = [s for s in filtered if s[3] == selected_section]
+    return filtered
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -239,8 +252,10 @@ with col1:
                             mime="text/csv"
                         )
 
+            except sqlite3.Error as db_error:
+                st.error(f"Database error: {str(db_error)}")
             except Exception as e:
-                st.error(f"Error analyzing class performance: {str(e)}")
+                st.error(f"Unexpected error: {str(e)}")
 
     else:
         # Overall system analytics
